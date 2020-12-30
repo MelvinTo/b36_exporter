@@ -20,19 +20,20 @@ var baud = 57600
 var addr = flag.String("listen-address", ":9301", "The address to listen on for prometheus request.")
 var debug = flag.Bool("debug", false, "whether to print raw data on console")
 
+var gauges = [][]string{
+	[]string{"unknown", "unknown"},
+	[]string{"pm2dot5", "PM 2.5"},
+	[]string{"formaldehyde", "Formaldehyde"},
+	[]string{"co2", "CO2"},
+	[]string{"temperature", "Temperature"},
+	[]string{"humidity", "Humidity"},
+	[]string{"voc", "VOC"},
+}
+
 var gaugesArray = []prometheus.Gauge{}
 
 func setupGauges() {
-	gauges := [][]string{
-		[]string{"unknown", "unknown"},
-		[]string{"pm2dot5", "PM 2.5"},
-		[]string{"formaldehyde", "Formaldehyde"},
-		[]string{"co2", "CO2"},
-		[]string{"temperature", "Temperature"},
-		[]string{"humidity", "Humidity"},
-		[]string{"voc", "VOC"},
-	}
-
+	gaugesArray = []prometheus.Gauge{}
 	for _, g := range gauges {
 		key := g[0]
 		desc := g[1]
@@ -53,15 +54,18 @@ func processData(input string) {
 		return
 	}
 
-	if *debug {
-		log.Println(input)
-	}
+	debugInfo := []string{}
 
 	for i := 0; i < 7; i++ {
 		if value, err := strconv.Atoi(items[i]); err == nil {
 			gaugesArray[i].Set(float64(value))
+			if *debug {
+				gauge := gauges[i]
+				debugInfo = append(debugInfo, fmt.Sprintf("%v: %v", gauge[1], value))
+			}
 		}
 	}
+	log.Println(strings.Join(debugInfo, ","))
 }
 
 func listenOnSerialPort() {
@@ -71,7 +75,7 @@ func listenOnSerialPort() {
 		log.Fatalln(err)
 	}
 
-	log.Println("Reading...")
+	log.Println("Reading device data every 30 seconds...")
 
 	for {
 		buf := make([]byte, 128)
@@ -95,7 +99,7 @@ func main() {
 
 	go listenOnSerialPort()
 
-	log.Println("prometheus metrics listens on", *addr)
+	log.Println("Prometheus metrics listens on", *addr)
 	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
