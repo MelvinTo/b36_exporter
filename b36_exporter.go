@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -128,10 +127,11 @@ func main() {
 	h := func(w http.ResponseWriter, _ *http.Request) {
 		b, err := json.Marshal(sensor)
 		if err != nil {
-			io.WriteString(w, "{}")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		io.WriteString(w, string(b))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(b)
 	}
 
 	log.Println("Prometheus metrics listens on", *addr)
