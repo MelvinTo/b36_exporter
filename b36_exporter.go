@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -19,6 +21,16 @@ var serialPortFile = flag.String("serial", "/dev/ttyUSB0", "the file path of the
 var baud = 57600
 var addr = flag.String("listen-address", ":9301", "The address to listen on for prometheus request.")
 var debug = flag.Bool("debug", false, "whether to print raw data on console")
+
+type Sensor struct {
+	PM2_5        int `json:"pm25"`
+	Formaldehyde int `json:"formaldehyde"`
+	CO2          int `json:"co2"`
+	Temperature  int `json:"temperature"`
+	Humidity     int `json:"humidity"`
+}
+
+var sensor = Sensor{}
 
 var gauges = [][]string{
 	[]string{"unknown", "unknown"},
@@ -63,7 +75,21 @@ func processData(input string) {
 				gauge := gauges[i]
 				debugInfo = append(debugInfo, fmt.Sprintf("%v: %v", gauge[1], value))
 			}
+
+			switch i {
+			case 1:
+				sensor.PM2_5 = value
+			case 2:
+				sensor.Formaldehyde = value
+			case 3:
+				sensor.CO2 = value
+			case 4:
+				sensor.Temperature = value
+			case 5:
+				sensor.Humidity = value
+			}
 		}
+
 	}
 	log.Println(strings.Join(debugInfo, ","))
 }
@@ -99,7 +125,17 @@ func main() {
 
 	go listenOnSerialPort()
 
+	h := func(w http.ResponseWriter, _ *http.Request) {
+		b, err := json.Marshal(sensor)
+		if err != nil {
+			io.WriteString(w, "{}")
+			return
+		}
+		io.WriteString(w, string(b))
+	}
+
 	log.Println("Prometheus metrics listens on", *addr)
 	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/json", h)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
